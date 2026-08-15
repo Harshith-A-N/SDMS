@@ -33,6 +33,7 @@ build/
 .vscode/
 
 ### Secrets / Environment ###
+application.properties
 application-local.properties
 application-secrets.properties
 .env
