@@ -1,20 +1,20 @@
 package com.sdms.application.service;
 
-import com.sdms.application.dto.ApplicationCreateRequest;
-import com.sdms.application.dto.ApplicationResponse;
-import com.sdms.application.dto.NotesRequest;
-import com.sdms.application.dto.RejectionRequest;
-import com.sdms.application.entity.Application;
-import com.sdms.application.entity.ApplicationStatus;
+import com.sdms.application.dto.*;
+import com.sdms.application.entity.*;
 import com.sdms.application.repository.ApplicationRepository;
 import com.sdms.beneficiary.entity.Beneficiary;
 import com.sdms.beneficiary.repository.BeneficiaryRepository;
 import com.sdms.common.exception.ResourceNotFoundException;
+import com.sdms.disbursement.entity.*;
+import com.sdms.disbursement.repository.DisbursementRepository;
 import com.sdms.scheme.entity.Scheme;
 import com.sdms.scheme.repository.SchemeRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -25,6 +25,7 @@ public class ApplicationService {
     private final ApplicationRepository applicationRepository;
     private final BeneficiaryRepository beneficiaryRepository;
     private final SchemeRepository schemeRepository;
+    private final DisbursementRepository disbursementRepository;
 
     public ApplicationResponse createApplication(ApplicationCreateRequest request) {
 
@@ -86,7 +87,17 @@ public class ApplicationService {
     // workflow methods
     public ApplicationResponse verifyByFieldOfficer(Long id, NotesRequest request) {
         Application application = getRequiredApplication(id);
+
+        if (application.getStatus() == ApplicationStatus.FIELD_VERIFIED) {
+            throw new IllegalStateException("Field verification is already done for this application.");
+        }
         validateStatus(application, ApplicationStatus.SUBMITTED);
+
+        if (application.getEligibilityScore() == 0) {
+            throw new IllegalStateException(
+                    "Cannot verify: beneficiary does not meet eligibility criteria for this scheme. Use reject instead.");
+        }
+
         application.setFieldOfficerNotes(request.getNotes());
         application.setStatus(ApplicationStatus.FIELD_VERIFIED);
         return mapToResponse(applicationRepository.save(application));
@@ -94,7 +105,12 @@ public class ApplicationService {
 
     public ApplicationResponse verifyByDistrictOfficer(Long id, NotesRequest request) {
         Application application = getRequiredApplication(id);
+
+        if (application.getStatus() == ApplicationStatus.DISTRICT_VERIFIED) {
+            throw new IllegalStateException("District verification is already done for this application.");
+        }
         validateStatus(application, ApplicationStatus.FIELD_VERIFIED);
+
         application.setDistrictOfficerNotes(request.getNotes());
         application.setStatus(ApplicationStatus.DISTRICT_VERIFIED);
         return mapToResponse(applicationRepository.save(application));
@@ -102,17 +118,45 @@ public class ApplicationService {
 
     public ApplicationResponse approveByFinance(Long id, NotesRequest request) {
         Application application = getRequiredApplication(id);
+
+        if (application.getStatus() == ApplicationStatus.APPROVED) {
+            throw new IllegalStateException("This application is already approved.");
+        }
         validateStatus(application, ApplicationStatus.DISTRICT_VERIFIED);
+
         application.setFinanceApproverNotes(request.getNotes());
         application.setStatus(ApplicationStatus.APPROVED);
-        return mapToResponse(applicationRepository.save(application));
+        Application saved = applicationRepository.save(application);
+
+        createMilestoneDisbursements(saved);  // creating the disbursements automatically here, once after the its status is approved
+
+        return mapToResponse(saved);
     }
 
-    public ApplicationResponse disburse(Long id) {
-        Application application = getRequiredApplication(id);
-        validateStatus(application, ApplicationStatus.APPROVED);
-        application.setStatus(ApplicationStatus.DISBURSED);
-        return mapToResponse(applicationRepository.save(application));
+    private void createMilestoneDisbursements(Application application) {
+        // check if disbursements is already created to this application or not
+        List<Disbursement> existing = disbursementRepository.findByApplicationId(application.getId());
+        if (!existing.isEmpty()) {
+            return;
+        }
+
+        BigDecimal grantAmount = application.getScheme().getGrantAmount();
+
+        BigDecimal milestone1Amount = grantAmount
+                .multiply(BigDecimal.valueOf(0.40))
+                .setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal milestone2Amount = grantAmount
+                .multiply(BigDecimal.valueOf(0.30))
+                .setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal milestone3Amount = grantAmount
+                .subtract(milestone1Amount)
+                .subtract(milestone2Amount);
+
+        disbursementRepository.save(new Disbursement(null, application, 1, milestone1Amount, DisbursementStatus.PENDING, null, null));
+        disbursementRepository.save(new Disbursement(null, application, 2, milestone2Amount, DisbursementStatus.PENDING, null, null));
+        disbursementRepository.save(new Disbursement(null, application, 3, milestone3Amount, DisbursementStatus.PENDING, null, null));
     }
 
     public ApplicationResponse reject(Long id, RejectionRequest request) {

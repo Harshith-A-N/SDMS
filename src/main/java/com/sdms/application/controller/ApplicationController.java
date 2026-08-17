@@ -61,11 +61,6 @@ public class ApplicationController {
         return ResponseEntity.ok(applicationService.approveByFinance(id, request));
     }
 
-    @PatchMapping("/{id}/disburse")
-    public ResponseEntity<ApplicationResponse> disburse(@PathVariable Long id) {
-        return ResponseEntity.ok(applicationService.disburse(id));
-    }
-
     @PatchMapping("/{id}/reject")
     public ResponseEntity<ApplicationResponse> reject(
             @PathVariable Long id, @Valid @RequestBody RejectionRequest request) {

@@ -1,0 +1,4 @@
+spring.datasource.url= your_my_sql_url
+spring.datasource.username = your_mysql_username
+spring.datasource.password = your_mysql_password
+server.port=port_number
