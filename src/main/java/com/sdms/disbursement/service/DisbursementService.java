@@ -3,6 +3,8 @@ package com.sdms.disbursement.service;
 import com.sdms.application.entity.Application;
 import com.sdms.application.entity.ApplicationStatus;
 import com.sdms.application.repository.ApplicationRepository;
+import com.sdms.audit.entity.AuditAction;
+import com.sdms.audit.service.AuditService;
 import com.sdms.common.exception.ResourceNotFoundException;
 import com.sdms.disbursement.dto.DisbursementReleaseRequest;
 import com.sdms.disbursement.dto.DisbursementResponse;
@@ -21,6 +23,7 @@ public class DisbursementService {
 
     private final DisbursementRepository disbursementRepository;
     private final ApplicationRepository applicationRepository;
+    private final AuditService auditService;
 
     public List<DisbursementResponse> getAllDisbursements() {
         return disbursementRepository.findAll()
@@ -31,6 +34,13 @@ public class DisbursementService {
 
     public List<DisbursementResponse> getDisbursementsByApplication(Long applicationId) {
         return disbursementRepository.findByApplicationIdOrderByMilestoneNumberAsc(applicationId)
+                .stream()
+                .map(this::mapToResponse)
+                .toList();
+    }
+
+    public List<DisbursementResponse> getDisbursementsByBeneficiary(Long beneficiaryId) {
+        return disbursementRepository.findByApplication_Beneficiary_Id(beneficiaryId)
                 .stream()
                 .map(this::mapToResponse)
                 .toList();
@@ -75,6 +85,8 @@ public class DisbursementService {
         disbursement.setRemarks(request.getRemarks());
         disbursementRepository.save(disbursement);
 
+        auditService.log(AuditAction.DISBURSEMENT_RELEASED, "Disbursement", disbursement.getId());
+
         checkAndMarkApplicationFullyDisbursed(disbursement.getApplication());
 
         return mapToResponse(disbursement);
@@ -106,6 +118,8 @@ public class DisbursementService {
         disbursement.setRemarks(request.getRemarks());
         disbursementRepository.save(disbursement);
 
+        auditService.log(AuditAction.DISBURSEMENT_MARKED_FAILED, "Disbursement", disbursement.getId());
+
         return mapToResponse(disbursement);
     }
 
@@ -119,6 +133,8 @@ public class DisbursementService {
         disbursement.setStatus(DisbursementStatus.PENDING);
         disbursement.setRemarks(null);
         disbursementRepository.save(disbursement);
+
+        auditService.log(AuditAction.DISBURSEMENT_RETRIED, "Disbursement", disbursement.getId());
 
         return mapToResponse(disbursement);
     }

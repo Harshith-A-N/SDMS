@@ -1,7 +1,10 @@
 package com.sdms.beneficiary.service;
 
+import com.sdms.audit.entity.AuditAction;
+import com.sdms.audit.service.AuditService;
 import com.sdms.beneficiary.dto.BeneficiaryCreateRequest;
 import com.sdms.beneficiary.dto.BeneficiaryResponse;
+import com.sdms.beneficiary.dto.BeneficiarySelfUpdateRequest;
 import com.sdms.beneficiary.entity.Beneficiary;
 import com.sdms.beneficiary.repository.BeneficiaryRepository;
 import com.sdms.common.exception.ResourceNotFoundException;
@@ -17,6 +20,7 @@ import java.util.List;
 public class BeneficiaryService {
 
     private final BeneficiaryRepository beneficiaryRepository;
+    private final AuditService auditService;
 
     public BeneficiaryResponse createBeneficiary(BeneficiaryCreateRequest request) {
         beneficiaryRepository.findByAadhaarNumber(request.getAadhaarNumber())
@@ -28,6 +32,9 @@ public class BeneficiaryService {
 
         Beneficiary beneficiary = mapToEntity(request);
         Beneficiary saved = beneficiaryRepository.save(beneficiary);
+
+        auditService.log(AuditAction.BENEFICIARY_CREATED, "Beneficiary", saved.getId());
+
         return mapToResponse(saved);
     }
 
@@ -78,6 +85,9 @@ public class BeneficiaryService {
         beneficiary.setIfscCode(request.getIfscCode());
 
         Beneficiary saved = beneficiaryRepository.save(beneficiary);
+
+        auditService.log(AuditAction.BENEFICIARY_UPDATED, "Beneficiary", saved.getId());
+
         return mapToResponse(saved);
     }
 
@@ -86,6 +96,8 @@ public class BeneficiaryService {
                 .orElseThrow(() -> new ResourceNotFoundException("Beneficiary not found with id: " + id));
         beneficiary.setIsActive(false);
         beneficiaryRepository.save(beneficiary);
+
+        auditService.log(AuditAction.BENEFICIARY_DEACTIVATED, "Beneficiary", beneficiary.getId());
     }
 
     public void activateBeneficiary(Long id){
@@ -93,6 +105,28 @@ public class BeneficiaryService {
                 .orElseThrow(() -> new ResourceNotFoundException("Beneficiary not found with id: " + id));
         beneficiary.setIsActive(true);
         beneficiaryRepository.save(beneficiary);
+
+        auditService.log(AuditAction.BENEFICIARY_ACTIVATED, "Beneficiary", beneficiary.getId());
+    }
+
+    public BeneficiaryResponse getOwnProfile(Long beneficiaryId) {
+        Beneficiary beneficiary = beneficiaryRepository.findById(beneficiaryId)
+                .orElseThrow(() -> new ResourceNotFoundException("Beneficiary not found with id: " + beneficiaryId));
+        return mapToResponse(beneficiary);
+    }
+
+    public BeneficiaryResponse updateOwnProfile(Long beneficiaryId, BeneficiarySelfUpdateRequest request) {
+        Beneficiary beneficiary = beneficiaryRepository.findById(beneficiaryId)
+                .orElseThrow(() -> new ResourceNotFoundException("Beneficiary not found with id: " + beneficiaryId));
+
+        beneficiary.setPhoneNumber(request.getPhoneNumber());
+        beneficiary.setEmail(request.getEmail());
+        beneficiary.setAddress(request.getAddress());
+        beneficiary.setBankAccountNumber(request.getBankAccountNumber());
+        beneficiary.setIfscCode(request.getIfscCode());
+
+        Beneficiary saved = beneficiaryRepository.save(beneficiary);
+        return mapToResponse(saved);
     }
 
     private Beneficiary mapToEntity(BeneficiaryCreateRequest request){

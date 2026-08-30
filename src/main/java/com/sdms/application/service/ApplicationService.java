@@ -3,6 +3,8 @@ package com.sdms.application.service;
 import com.sdms.application.dto.*;
 import com.sdms.application.entity.*;
 import com.sdms.application.repository.ApplicationRepository;
+import com.sdms.audit.entity.AuditAction;
+import com.sdms.audit.service.AuditService;
 import com.sdms.beneficiary.entity.Beneficiary;
 import com.sdms.beneficiary.repository.BeneficiaryRepository;
 import com.sdms.common.exception.ResourceNotFoundException;
@@ -26,6 +28,7 @@ public class ApplicationService {
     private final BeneficiaryRepository beneficiaryRepository;
     private final SchemeRepository schemeRepository;
     private final DisbursementRepository disbursementRepository;
+    private final AuditService auditService;
 
     public ApplicationResponse createApplication(ApplicationCreateRequest request) {
 
@@ -100,7 +103,11 @@ public class ApplicationService {
 
         application.setFieldOfficerNotes(request.getNotes());
         application.setStatus(ApplicationStatus.FIELD_VERIFIED);
-        return mapToResponse(applicationRepository.save(application));
+        Application saved = applicationRepository.save(application);
+
+        auditService.log(AuditAction.APPLICATION_FIELD_VERIFIED, "Application", saved.getId()); // audit log
+
+        return mapToResponse(saved);
     }
 
     public ApplicationResponse verifyByDistrictOfficer(Long id, NotesRequest request) {
@@ -113,7 +120,11 @@ public class ApplicationService {
 
         application.setDistrictOfficerNotes(request.getNotes());
         application.setStatus(ApplicationStatus.DISTRICT_VERIFIED);
-        return mapToResponse(applicationRepository.save(application));
+        Application saved = applicationRepository.save(application);
+
+        auditService.log(AuditAction.APPLICATION_DISTRICT_VERIFIED, "Application", saved.getId());
+
+        return mapToResponse(saved);
     }
 
     public ApplicationResponse approveByFinance(Long id, NotesRequest request) {
@@ -127,6 +138,8 @@ public class ApplicationService {
         application.setFinanceApproverNotes(request.getNotes());
         application.setStatus(ApplicationStatus.APPROVED);
         Application saved = applicationRepository.save(application);
+
+        auditService.log(AuditAction.APPLICATION_APPROVED, "Application", saved.getId());
 
         createMilestoneDisbursements(saved);  // creating the disbursements automatically here, once after the its status is approved
 
@@ -169,7 +182,11 @@ public class ApplicationService {
         application.setRejectedBy(request.getRejectedBy());
         application.setRejectionReason(request.getRejectionReason());
         application.setStatus(ApplicationStatus.REJECTED);
-        return mapToResponse(applicationRepository.save(application));
+        Application saved = applicationRepository.save(application);
+
+        auditService.log(AuditAction.APPLICATION_REJECTED, "Application", saved.getId());
+
+        return mapToResponse(saved);
     }
 
     // ---- helpers ----
@@ -194,7 +211,7 @@ public class ApplicationService {
             return 100;
         }
         return 0;
-    }   
+    }
 
     // ---- mapping helpers ----
     private ApplicationResponse mapToResponse(Application app) {
