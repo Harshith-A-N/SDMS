@@ -14,6 +14,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import com.sdms.ai.service.DocumentVerificationService;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -30,6 +31,7 @@ public class DocumentService {
 
     private final DocumentRepository documentRepository;
     private final ApplicationRepository applicationRepository;
+    private final DocumentVerificationService documentVerificationService;
 
     @Value("${document.upload-dir}")
     private String uploadDir;
@@ -80,6 +82,7 @@ public class DocumentService {
         );
 
         ApplicationDocument saved = documentRepository.save(document);
+        documentVerificationService.verifyDocument(saved);
         return mapToResponse(saved);
     }
 
